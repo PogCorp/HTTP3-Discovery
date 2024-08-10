@@ -13,6 +13,8 @@ int main(int argc, char *argv[]) {
     logger("ERROR", "unable to initialize lsquic");
     exit(EXIT_FAILURE);
   }
+  // lsquic_packets_out_f pogcorp_out = ;
+  //  lsquic_engine_api engine_api = {.ea_packets_out}
 
   lsquic_global_cleanup();
   return EXIT_SUCCESS;
