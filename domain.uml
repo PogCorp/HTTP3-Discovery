@@ -1,0 +1,60 @@
+@startuml
+<style>
+classDiagram {
+    FontName times
+    LineColor Black
+    FontColor Black
+}
+</style>
+
+interface QuicAdapter{
+    + listenAddr()
+    + recvPackets()
+    + sendPackets()
+}
+
+struct QuicConfig{
+    idleTime
+    version
+    maxStreams
+    maxConnections
+}
+
+class QuicGo{
+}
+
+class PicoQuic{
+}
+
+class Server{
+    + listenAddr()
+    - handleRequest()
+}
+
+package net.http{
+    class ServeMux{
+        + Handle()
+        + HandleFunc()
+    }
+
+    struct Request{
+        + Body
+        + Header
+        + Method
+    }
+
+    interface ResponseWritter{
+        + WriteHeader()
+        + Write()
+        + Header()
+    }
+}
+
+Server "1" o-left- "1" QuicAdapter
+Server "1" o-- "1" ServeMux
+ServeMux "1" .down.> "*" Request : <<dependency>>
+ServeMux "1" .right.> "*" ResponseWritter : <<dependency>>
+QuicAdapter "1" o-left- "1" QuicConfig
+QuicGo ..|> QuicAdapter
+PicoQuic ..|> QuicAdapter
+@enduml
