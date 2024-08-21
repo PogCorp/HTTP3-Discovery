@@ -5,7 +5,10 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"os/signal"
+	"runtime/trace"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -14,6 +17,10 @@ import (
 )
 
 func server(addr, cert, key, keylogPath string) {
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+
 	config, err := tls.LoadX509KeyPair(cert, key)
 	if err != nil {
 		log.Println("unable to load certificate", err)
@@ -41,10 +48,28 @@ func server(addr, cert, key, keylogPath string) {
 		QUICConfig: &quic.Config{Tracer: qlog.DefaultTracer},
 	}
 
+	// pprof in real time
+	//
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
+
+	go func() {
+		for sig := range stop {
+			log.Printf("Stoping QUIC Server now, got signal: %s\n", sig.String())
+			err := server.Close()
+			if err != nil {
+				log.Println("Unable to CloseGracefully")
+			}
+			log.Println("CloseGracefully executed")
+		}
+	}()
+
 	err = server.ListenAndServe()
 	if err != nil {
 		log.Println("unable to ListenAndServe", err)
 	}
+
 }
 
 func main() {
@@ -69,5 +94,32 @@ func main() {
 		log.Fatalln("keylog path not provided")
 	}
 
+	f, err := os.Create("runtime.trace")
+	if err != nil {
+		log.Fatal("could not create runtime tracer: ", err)
+	}
+	defer f.Close() // error handling omitted for example
+	if err := trace.Start(f); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+	}
+	defer func() {
+		trace.Stop()
+		log.Println("stoping runtime tracer")
+	}()
+
+	// pprof after runtime execution
+	//
+	//f, err := os.Create("cpu.profile")
+	//if err != nil {
+	//	log.Fatal("could not create CPU profile: ", err)
+	//}
+	//defer f.Close() // error handling omitted for example
+	//if err := pprof.StartCPUProfile(f); err != nil {
+	//	log.Fatal("could not start CPU profile: ", err)
+	//}
+	//defer func() {
+	//	pprof.StopCPUProfile()
+	//	log.Println("ending profiling")
+	//}()
 	server(*addr, *cert, *key, *logPath)
 }
