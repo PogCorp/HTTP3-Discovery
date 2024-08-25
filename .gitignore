@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+
+# trace
+trace
+*.trace
+*.svg
+*.pdf
+*.txt
+*.profile
+*.sh

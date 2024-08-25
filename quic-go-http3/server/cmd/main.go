@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"runtime/trace"
 	"time"
 
@@ -45,7 +47,7 @@ func server(addr, cert, key, keylogPath string) {
 		Handler:    mux,
 		Addr:       addr,
 		TLSConfig:  http3.ConfigureTLSConfig(&tls.Config{Certificates: []tls.Certificate{config}, KeyLogWriter: w}),
-		QUICConfig: &quic.Config{Tracer: qlog.DefaultTracer},
+		QUICConfig: &quic.Config{Tracer: qlog.DefaultConnectionTracer},
 	}
 
 	// pprof in real time
@@ -79,6 +81,8 @@ func main() {
 	cert := flag.String("c", "", "/path/to/certificate.crt")
 	key := flag.String("k", "", "/path/to/private.key")
 	logPath := flag.String("log", "", "path/to/logs")
+	qlogPath := flag.String("qlog", "", "path/to/qlog")
+	withTracing := flag.Bool("trace", false, "cpu trace program")
 
 	flag.Parse()
 
@@ -93,33 +97,40 @@ func main() {
 	if *logPath == "" {
 		log.Fatalln("keylog path not provided")
 	}
-
-	f, err := os.Create("runtime.trace")
-	if err != nil {
-		log.Fatal("could not create runtime tracer: ", err)
+	if *qlogPath != "" {
+		os.Setenv("QLOGDIR", *qlogPath)
 	}
-	defer f.Close() // error handling omitted for example
-	if err := trace.Start(f); err != nil {
-		log.Fatal("could not start CPU profile: ", err)
-	}
-	defer func() {
-		trace.Stop()
-		log.Println("stoping runtime tracer")
-	}()
 
-	// pprof after runtime execution
-	//
-	//f, err := os.Create("cpu.profile")
-	//if err != nil {
-	//	log.Fatal("could not create CPU profile: ", err)
-	//}
-	//defer f.Close() // error handling omitted for example
-	//if err := pprof.StartCPUProfile(f); err != nil {
-	//	log.Fatal("could not start CPU profile: ", err)
-	//}
-	//defer func() {
-	//	pprof.StopCPUProfile()
-	//	log.Println("ending profiling")
-	//}()
+	if *withTracing {
+		now := time.Now()
+
+		f, err := os.Create(fmt.Sprintf("%d.runtime.trace", now.Unix()))
+		if err != nil {
+			log.Fatal("could not create runtime tracer: ", err)
+		}
+		defer f.Close() // error handling omitted for example
+		if err := trace.Start(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer func() {
+			trace.Stop()
+			log.Println("stoping runtime tracer")
+		}()
+
+		//pprof after runtime execution
+
+		cpuFile, err := os.Create(fmt.Sprintf("%d.cpu.profile", now.Unix()))
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		defer cpuFile.Close() // error handling omitted for example
+		if err := pprof.StartCPUProfile(cpuFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer func() {
+			pprof.StopCPUProfile()
+			log.Println("ending profiling")
+		}()
+	}
 	server(*addr, *cert, *key, *logPath)
 }
