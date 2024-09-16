@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlog"
@@ -27,12 +28,30 @@ func client(addr string) {
 			return
 		}
 
+		log.Println(message)
+
 		tlsConf := &tls.Config{
 			InsecureSkipVerify: true,
+			NextProtos:         []string{"echo"},
 		}
-		conn, err := quic.DialAddr(context.Background(), addr, tlsConf, &quic.Config{Tracer: qlog.DefaultTracer})
+
+		connUdp, err := net.ListenPacket("udp6", ":0")
 		if err != nil {
 			log.Println(err)
+			return
+		}
+
+		// NOTE: example from https://github.com/golang/go/commit/645d4726f0f36c3aec9c864f47411a74c20ebc70
+		udpAddr, err := net.ResolveUDPAddr("udp6", addr)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		conn, err := quic.Dial(context.Background(), connUdp, udpAddr, tlsConf, &quic.Config{Tracer: qlog.DefaultTracer})
+		//conn, err := quic.DialAddr(context.Background(), addr, tlsConf, &quic.Config{Tracer: qlog.DefaultTracer})
+		if err != nil {
+			log.Println("Big retard", err)
+			return
 		}
 
 		stream, err := conn.OpenStreamSync(context.Background())
